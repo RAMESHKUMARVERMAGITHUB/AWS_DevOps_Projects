@@ -43,40 +43,60 @@ pipeline{
         stage("quality gate"){
            steps {
                 script {
+                    dir('CI-CD_Project_with_Jenkins-Docker-Ansible-Kubernetes') {
                     waitForQualityGate abortPipeline: false, credentialsId: 'sonar'
+                    }
                 }
             }
         }
         stage('Install Dependencies') {
             steps {
+                script {
+                    dir('CI-CD_Project_with_Jenkins-Docker-Ansible-Kubernetes') {
                 sh "npm install"
+                    }
+                }
             }
         }
         stage('OWASP FS SCAN') {
             steps {
+                script {
+                    dir('CI-CD_Project_with_Jenkins-Docker-Ansible-Kubernetes') {
                 dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
                 dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                    }
+                }
             }
         }
          stage('TRIVY FS SCAN') {
             steps {
+                script {
+                    dir('CI-CD_Project_with_Jenkins-Docker-Ansible-Kubernetes') {
                 sh "trivy fs . > trivyfs.txt"
+                    }
+                }
             }
         }
         stage("Docker Build & Push"){
             steps{
                 script{
+                    dir('CI-CD_Project_with_Jenkins-Docker-Ansible-Kubernetes') {
                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){
                        sh "docker build -t rameshkumarverma/regapp:latest ."
                        // sh "docker tag uber rameshkumarverma/regapp:latest "
                        sh "docker push rameshkumarverma/regapp:latest"
+                       }
                     }
                 }
             }
         }
         stage("TRIVY"){
             steps{
+                script{
+                    dir('CI-CD_Project_with_Jenkins-Docker-Ansible-Kubernetes') {
                 sh "trivy image rameshkumarverma/regapp:latest > trivyimage.txt"
+                    }
+                }
             }
         }
         // stage("deploy_docker"){
