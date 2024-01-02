@@ -1,0 +1,100 @@
+pipeline{
+    agent any
+    tools{
+        jdk 'jdk17'
+        nodejs 'node16'
+        maven 'maven'
+    }
+    environment {
+        SCANNER_HOME=tool 'sonar-scanner'
+    }
+    stages {
+        stage('clean workspace'){
+            steps{
+                cleanWs()
+            }
+        }
+        stage('Checkout from Git'){
+            steps{
+                git branch: 'main', url: 'https://github.com/RAMESHKUMARVERMAGITHUB/AWS_DevOps_Projects.git'
+            }
+        }
+      stage("build code "){
+            steps{
+              script{
+                    dir('CI-CD_Project_with_Jenkins-Docker-Ansible-Kubernetes') {
+                    sh 'mvn clean package'
+                    }
+              }  
+            }
+        }
+        stage("Sonarqube Analysis "){
+            steps{
+              script{
+                    dir('CI-CD_Project_with_Jenkins-Docker-Ansible-Kubernetes') {
+                      withSonarQubeEnv('sonar-server') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=regapp \
+                    -Dsonar.projectKey=regapp'''
+                      }
+                    }
+              }  
+            }
+        }
+        stage("quality gate"){
+           steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar'
+                }
+            }
+        }
+        stage('Install Dependencies') {
+            steps {
+                sh "npm install"
+            }
+        }
+        stage('OWASP FS SCAN') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+         stage('TRIVY FS SCAN') {
+            steps {
+                sh "trivy fs . > trivyfs.txt"
+            }
+        }
+        stage("Docker Build & Push"){
+            steps{
+                script{
+                   withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){
+                       sh "docker build -t rameshkumarverma/regapp:latest ."
+                       // sh "docker tag uber rameshkumarverma/regapp:latest "
+                       sh "docker push rameshkumarverma/regapp:latest"
+                    }
+                }
+            }
+        }
+        stage("TRIVY"){
+            steps{
+                sh "trivy image rameshkumarverma/regapp:latest > trivyimage.txt"
+            }
+        }
+        // stage("deploy_docker"){
+        //     steps{
+        //         sh "docker run -d --name uber -p 3000:3000 rameshkumarverma/regapp:latest"
+        //     }
+        // }
+        stage('Deploy to kubernets'){
+            steps{
+                script{
+                    dir('CI-CD_Project_with_Jenkins-Docker-Ansible-Kubernetes') {
+                        withKubeConfig(caCertificate: '', clusterName: '', contextName: '', credentialsId: 'k8s', namespace: '', restrictKubeConfigAccess: false, serverUrl: '') {
+                                sh 'kubectl apply -f regapp-deploy.yml'
+                                sh 'kubectl apply -f regapp-service.yml'
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
